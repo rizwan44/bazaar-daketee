@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "dev:local": "tsx watch src/localIndex.ts",
     "build": "tsc -p tsconfig.json",
-    "postinstall": "prisma generate && prisma migrate deploy",
+    "postinstall": "node scripts/postinstall.mjs || node /home/easycashpk/card-game/server/scripts/postinstall.mjs",
     "start": "tsx src/index.ts",
     "test": "vitest run",
     "prisma:migrate": "prisma migrate dev",
@@ -20,6 +20,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "prisma": "^5.19.1",
     "socket.io": "^4.7.5",
     "tsx": "^4.19.0",
     "zod": "^3.23.8"
@@ -29,7 +30,6 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.14.15",
     "@types/supertest": "^6.0.2",
-    "prisma": "^5.19.1",
     "supertest": "^7.0.0",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"
