@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Bazaar Daketee</string>
+    <string name="title_activity_main">Bazaar Daketee</string>
+    <string name="package_name">com.easycashpk.bazaardaketee</string>
+    <string name="custom_url_scheme">com.easycashpk.bazaardaketee</string>
+</resources>

@@ -1,0 +1,15 @@
+# Serves this single-page app correctly on Apache/LiteSpeed (cPanel) hosting.
+# Without this, refreshing (or deep-linking) a client-side route like
+# /room/ABC123 returns a 404 instead of index.html, since Apache otherwise
+# looks for a real file/folder at that path.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Let real files (JS/CSS/icons/etc.) and the service worker serve normally.
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+
+  # Everything else falls back to index.html so React Router can handle it.
+  RewriteRule ^ index.html [L]
+</IfModule>

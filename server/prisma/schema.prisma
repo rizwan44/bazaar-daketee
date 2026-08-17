@@ -1,0 +1,341 @@
+// Phase 1: schema only, applied via migration. Business logic (auth, rooms,
+// matches) lands in later phases and will read/write these tables.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum FriendRequestStatus {
+  pending
+  accepted
+  rejected
+}
+
+enum RoomStatus {
+  waiting
+  in_progress
+  finished
+}
+
+enum GameSessionStatus {
+  active
+  completed
+  abandoned
+}
+
+enum LeaderboardPeriod {
+  daily
+  weekly
+  monthly
+  all_time
+}
+
+enum ChatMessageType {
+  text
+  emoji
+  quick
+}
+
+enum Theme {
+  dark
+  light
+}
+
+model User {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  email        String?   @unique
+  passwordHash String?   @map("password_hash")
+  isGuest      Boolean   @default(false) @map("is_guest")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  profile             Profile?
+  settings            UserSettings?
+  sessions            UserSession[]
+  friendsAsUser       Friend[]           @relation("FriendsAsUser")
+  friendsAsFriend     Friend[]           @relation("FriendsAsFriend")
+  sentRequests        FriendRequest[]    @relation("SentFriendRequests")
+  receivedRequests    FriendRequest[]    @relation("ReceivedFriendRequests")
+  hostedRooms         Room[]             @relation("HostedRooms")
+  roomMemberships     RoomPlayer[]
+  gamePlayers         GamePlayer[]
+  gameResults         GameResult[]
+  leaderboardEntries  Leaderboard[]
+  userAchievements    UserAchievement[]
+  chatMessages        ChatMessage[]
+  notifications       Notification[]
+
+  @@map("users")
+}
+
+model UserSession {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  tokenHash  String   @map("token_hash")
+  deviceInfo String?  @map("device_info")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+  expiresAt  DateTime @map("expires_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+model Profile {
+  userId      String  @id @map("user_id")
+  displayName String? @map("display_name")
+  avatarUrl   String? @map("avatar_url")
+  bio         String? @db.Text
+  level       Int     @default(1)
+  xp          Int     @default(0)
+  coins       Int     @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model UserSettings {
+  userId           String  @id @map("user_id")
+  soundEnabled     Boolean @default(true) @map("sound_enabled")
+  musicEnabled     Boolean @default(true) @map("music_enabled")
+  vibrationEnabled Boolean @default(true) @map("vibration_enabled")
+  volume           Int     @default(80)
+  theme            Theme   @default(dark)
+  language         String  @default("en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model Friend {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  friendId  String   @map("friend_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User @relation("FriendsAsUser", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("FriendsAsFriend", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@map("friends")
+}
+
+model FriendRequest {
+  id         String              @id @default(uuid())
+  senderId   String              @map("sender_id")
+  receiverId String              @map("receiver_id")
+  status     FriendRequestStatus @default(pending)
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  sender   User @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([receiverId, status])
+  @@map("friend_requests")
+}
+
+/// The 52-game catalog ("game_types"), seeded from shared/src/games/catalog.ts
+model Game {
+  id            String   @id @default(uuid())
+  key           String   @unique
+  name          String
+  category      String
+  minPlayers    Int      @map("min_players")
+  maxPlayers    Int      @map("max_players")
+  isSolo        Boolean  @default(true) @map("is_solo")
+  isImplemented Boolean  @default(false) @map("is_implemented")
+  thumbnailUrl  String?  @map("thumbnail_url")
+  description   String?  @db.Text
+
+  rooms         Room[]
+  gameSessions  GameSession[]
+  leaderboards  Leaderboard[]
+
+  @@map("games")
+}
+
+model Room {
+  id           String     @id @default(uuid())
+  code         String     @unique
+  gameId       String     @map("game_id")
+  hostUserId   String     @map("host_user_id")
+  isPrivate    Boolean    @default(false) @map("is_private")
+  maxPlayers   Int        @map("max_players")
+  status       RoomStatus @default(waiting)
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  game         Game          @relation(fields: [gameId], references: [id])
+  host         User          @relation("HostedRooms", fields: [hostUserId], references: [id])
+  players      RoomPlayer[]
+  gameSessions GameSession[]
+  chatMessages ChatMessage[]
+
+  @@map("rooms")
+}
+
+model RoomPlayer {
+  id        String   @id @default(uuid())
+  roomId    String   @map("room_id")
+  userId    String   @map("user_id")
+  seatIndex Int      @map("seat_index")
+  isReady   Boolean  @default(false) @map("is_ready")
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@map("room_players")
+}
+
+model GameSession {
+  id        String            @id @default(uuid())
+  roomId    String?           @map("room_id")
+  gameId    String            @map("game_id")
+  status    GameSessionStatus @default(active)
+  rngSeed   String?           @map("rng_seed")
+  startedAt DateTime          @default(now()) @map("started_at")
+  endedAt   DateTime?         @map("ended_at")
+
+  room         Room?         @relation(fields: [roomId], references: [id])
+  game         Game          @relation(fields: [gameId], references: [id])
+  players      GamePlayer[]
+  moves        GameMove[]
+  results      GameResult[]
+  chatMessages ChatMessage[]
+
+  @@map("game_sessions")
+}
+
+model GamePlayer {
+  id            String  @id @default(uuid())
+  gameSessionId String  @map("game_session_id")
+  userId        String? @map("user_id")
+  isAI          Boolean @default(false) @map("is_ai")
+  aiDifficulty  String? @map("ai_difficulty")
+  aiPersonality String? @map("ai_personality")
+  seatIndex     Int     @map("seat_index")
+  finalScore    Int?    @map("final_score")
+  result        String?
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  user        User?       @relation(fields: [userId], references: [id])
+  moves       GameMove[]
+
+  @@index([gameSessionId])
+  @@map("game_players")
+}
+
+model GameMove {
+  id            String   @id @default(uuid())
+  gameSessionId String   @map("game_session_id")
+  gamePlayerId  String   @map("game_player_id")
+  moveType      String   @map("move_type")
+  payload       Json?
+  moveIndex     Int      @map("move_index")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  gamePlayer  GamePlayer  @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
+
+  @@index([gameSessionId, moveIndex])
+  @@map("game_moves")
+}
+
+model GameResult {
+  id            String   @id @default(uuid())
+  gameSessionId String   @map("game_session_id")
+  userId        String   @map("user_id")
+  xpEarned      Int      @default(0) @map("xp_earned")
+  coinsEarned   Int      @default(0) @map("coins_earned")
+  placement     Int?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("game_results")
+}
+
+model Leaderboard {
+  id         String             @id @default(uuid())
+  userId     String             @map("user_id")
+  gameId     String?            @map("game_id")
+  period     LeaderboardPeriod
+  score      Int
+  periodDate DateTime           @map("period_date") @db.Date
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game? @relation(fields: [gameId], references: [id])
+
+  @@index([gameId, period, score])
+  @@map("leaderboards")
+}
+
+model Achievement {
+  id          String  @id @default(uuid())
+  key         String  @unique
+  name        String
+  description String? @db.Text
+  iconUrl     String? @map("icon_url")
+  criteria    Json?
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  achievementId String   @map("achievement_id")
+  unlockedAt    DateTime @default(now()) @map("unlocked_at")
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+model ChatMessage {
+  id            String          @id @default(uuid())
+  roomId        String?         @map("room_id")
+  gameSessionId String?         @map("game_session_id")
+  userId        String          @map("user_id")
+  message       String          @db.Text
+  type          ChatMessageType @default(text)
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  room        Room?        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  gameSession GameSession? @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@map("chat_messages")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String
+  payload   Json?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
