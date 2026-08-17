@@ -19,10 +19,14 @@ jobs:
         with:
           node-version: 20
 
+      # Capacitor 7's Android library compiles against Java 21 (its Gradle
+      # config sets sourceCompatibility 21) — the JDK running Gradle has to
+      # be at least that new, or javac rejects it with "invalid source
+      # release: 21".
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       # --ignore-scripts: the server workspace's postinstall runs
       # `prisma generate && prisma migrate deploy`, which needs a real
