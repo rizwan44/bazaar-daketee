@@ -12,3 +12,6 @@ client/android/app/build/
 client/android/.gradle/
 client/android/local.properties
 server-upload*.zip
+*.tsbuildinfo
+client/vite.config.js
+client/vite.config.d.ts
